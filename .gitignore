@@ -1,0 +1,17 @@
+# Xcode 用户与本地状态
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# 本地签名与环境文件
+*.mobileprovision
+*.p12
+.env
+.env.*
