@@ -163,17 +163,50 @@ private struct SetupWelcomeView: View {
 private struct ManualAddView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @State private var messageText = ""
     @State private var code = ""
     @State private var stationName = ""
     @State private var address = ""
     @State private var courier = ""
     @State private var errorMessage: String?
+    @State private var didRecognizeMessage = false
 
     let onSaved: (String, String) -> Void
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $messageText)
+                            .frame(minHeight: 112)
+                            .scrollContentBackground(.hidden)
+                            .onChange(of: messageText) { _, newValue in
+                                // 粘贴短信后自动尝试识别，输入过短时不打断用户填写。
+                                guard newValue.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { return }
+                                recognizeMessage(showFailure: false)
+                            }
+                        if messageText.isEmpty {
+                            Text("粘贴完整的取件短信，App 会自动识别取件码和驿站")
+                                .font(.body)
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 8)
+                                .padding(.leading, 5)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    Button {
+                        recognizeMessage(showFailure: true)
+                    } label: {
+                        Label(didRecognizeMessage ? "已识别，可继续修改" : "识别短信内容", systemImage: didRecognizeMessage ? "checkmark.circle" : "wand.and.stars")
+                    }
+                    .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } header: {
+                    Text("粘贴短信")
+                } footer: {
+                    Text("支持直接粘贴短信全文，也可以在下面手动填写。")
+                }
+
                 Section("取件信息") {
                     TextField("取件码", text: $code)
                         .textInputAutocapitalization(.characters)
@@ -181,11 +214,6 @@ private struct ManualAddView: View {
                     TextField("驿站名称", text: $stationName)
                     TextField("地址（选填）", text: $address)
                     TextField("快递公司（选填）", text: $courier)
-                }
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
                 }
             }
             .navigationTitle("手动添加")
@@ -200,8 +228,31 @@ private struct ManualAddView: View {
                                   || stationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .alert("无法添加", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("知道了", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "请检查输入内容后重试。")
+            }
         }
-        .presentationDetents([.medium, .large])
+    .presentationDetents([.medium, .large])
+    }
+
+    private func recognizeMessage(showFailure: Bool) {
+        let message = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return }
+        guard let result = PickupParser.parse(message), let firstCode = result.codes.first else {
+            if showFailure { errorMessage = "没有识别到明确的取件码，请检查短信内容或手动填写。" }
+            return
+        }
+        code = firstCode
+        stationName = result.stationName
+        address = result.stationAddress
+        courier = result.courierName
+        errorMessage = result.codes.count > 1 ? "识别到多个取件码，当前先填入第一个：\(firstCode)" : nil
+        didRecognizeMessage = true
     }
 
     private func save() {

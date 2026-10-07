@@ -18,6 +18,8 @@ struct PickupHomeView: View {
     let onDelete: (PickupItem) -> Void
     let onCompleteAll: ([PickupItem]) -> Void
     @State private var showingCompleteAllConfirmation = false
+    @State private var floatingButtonOffset = CGSize.zero
+    @GestureState private var floatingButtonDrag = CGSize.zero
 
     private var groups: [PickupStationGroup] {
         let values = Dictionary(grouping: items) { "\($0.stationName)|\($0.stationAddress)" }
@@ -50,17 +52,6 @@ struct PickupHomeView: View {
                     } else {
                         HomeSummaryView(count: items.count, stationCount: groups.count)
 
-                        Button {
-                            showingCompleteAllConfirmation = true
-                        } label: {
-                            Label("全部标记为已取", systemImage: "checkmark.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-
                         ForEach(groups) { group in
                             VStack(spacing: 0) {
                                 NavigationLink {
@@ -75,7 +66,7 @@ struct PickupHomeView: View {
                                     HStack(spacing: 12) {
                                         Image(systemName: stationSymbol(for: group.name))
                                             .font(.title3.weight(.medium))
-                                            .foregroundStyle(.tint)
+                                            .foregroundStyle(.primary)
                                             .frame(width: 38, height: 38)
                                             .background(.quaternary, in: Circle())
                                         VStack(alignment: .leading, spacing: 3) {
@@ -121,7 +112,14 @@ struct PickupHomeView: View {
                                     Color.clear.frame(height: 10)
                                 }
                             }
-                            .glassEffect(.regular.tint(.blue.opacity(0.06)), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .background(
+                                Color(uiColor: .secondarySystemBackground),
+                                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.08), lineWidth: 0.8)
+                            }
                         }
                     }
                 }
@@ -130,6 +128,42 @@ struct PickupHomeView: View {
                 .padding(.bottom, 30)
             }
             .background(Color(uiColor: .systemGroupedBackground))
+            .overlay(alignment: .bottomTrailing) {
+                if !items.isEmpty {
+                    Button {
+                        showingCompleteAllConfirmation = true
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 54, height: 54)
+                            .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.8)
+                            }
+                            .shadow(color: .black.opacity(0.14), radius: 12, y: 5)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("全部标记为已取")
+                    .offset(
+                        x: floatingButtonOffset.width + floatingButtonDrag.width,
+                        y: floatingButtonOffset.height + floatingButtonDrag.height
+                    )
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .updating($floatingButtonDrag) { value, state, _ in
+                                state = value.translation
+                            }
+                            .onEnded { value in
+                                floatingButtonOffset.width += value.translation.width
+                                floatingButtonOffset.height += value.translation.height
+                            }
+                    )
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 22)
+                }
+            }
             .navigationTitle("取件")
             .searchable(text: $searchText, prompt: "搜索取件码、驿站或地址")
             .toolbar {
@@ -138,7 +172,8 @@ struct PickupHomeView: View {
                         Image(systemName: "plus")
                             .font(.body.weight(.semibold))
                             .frame(width: 32, height: 32)
-                            .glassEffect(.regular, in: Circle())
+                            .background(Color(uiColor: .systemBackground).opacity(0.72), in: Circle())
+                            .overlay { Circle().stroke(Color.primary.opacity(0.12), lineWidth: 0.8) }
                     }
                     .accessibilityLabel("手动添加")
                 }
@@ -165,16 +200,16 @@ private struct HomeSummaryView: View {
         HStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(.blue.opacity(0.13))
+                    .fill(.quaternary)
                     .frame(width: 48, height: 48)
                 Image(systemName: "shippingbox.fill")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.primary)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(count == 1 ? "1 个包裹待取" : "(count) 个包裹待取")
+                Text("待取包裹")
                     .font(.title3.weight(.semibold))
-                Text(stationCount == 1 ? "来自 1 个驿站" : "来自 (stationCount) 个驿站")
+                Text("\(count) 个 · 来自 \(stationCount) 个驿站")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -184,10 +219,13 @@ private struct HomeSummaryView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(18)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            Color(uiColor: .secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.3), lineWidth: 0.5)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.8)
         }
     }
 }
@@ -666,11 +704,12 @@ private struct PickupCodeRow: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.tint)
                 } else {
-                    Image(systemName: "doc.on.doc")
+                        Image(systemName: "doc.on.doc")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(.tint)
-                        .frame(width: 42, height: 42)
-                        .glassEffect(.regular, in: Circle())
+                            .foregroundStyle(.primary)
+                            .frame(width: 42, height: 42)
+                        .background(Color(uiColor: .systemBackground).opacity(0.72), in: Circle())
+                        .overlay { Circle().stroke(Color.primary.opacity(0.12), lineWidth: 0.8) }
                 }
             }
             .buttonStyle(.plain)
