@@ -228,14 +228,16 @@ private struct ManualAddView: View {
                                   || stationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .alert("无法添加", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button("知道了", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "请检查输入内容后重试。")
-            }
+            .pickupPrompt(
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                ),
+                title: "无法添加",
+                message: errorMessage ?? "请检查输入内容后重试。",
+                confirmTitle: "知道了",
+                cancelTitle: nil
+            ) {}
         }
     .presentationDetents([.medium, .large])
     }

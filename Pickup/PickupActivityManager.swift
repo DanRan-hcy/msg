@@ -26,7 +26,13 @@ enum PickupActivityManager {
         }
     }
 
+    @discardableResult
     static func refresh(context: ModelContext) async -> RefreshResult {
+        do {
+            try PickupStore.repairParsedWaitingItems(in: context)
+        } catch {
+            return .failed("修正旧取件信息失败，请重新打开 App 重试")
+        }
         let descriptor = FetchDescriptor<PickupItem>(
             predicate: #Predicate { $0.statusRawValue == "waiting" },
             sortBy: [SortDescriptor(\PickupItem.receivedAt, order: .reverse)]
@@ -56,7 +62,8 @@ enum PickupActivityManager {
             return .init(
                 name: first.stationName,
                 address: first.stationAddress,
-                codes: group.map(\.code).prefix(6).map { $0 }
+                codes: group.map(\.code).prefix(6).map { $0 },
+                courierNames: Array(Set(group.map(\.courierName).filter { !$0.isEmpty })).sorted()
             )
         }
         let state = PickupActivityAttributes.ContentState(

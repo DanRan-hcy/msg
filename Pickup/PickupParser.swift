@@ -20,10 +20,8 @@ enum PickupParser {
         "菜鸟", "妈妈驿站", "兔喜", "中通", "圆通", "申通", "韵达", "极兔", "顺丰", "京东", "邮政"
     ]
     private static let sensitiveTerms = ["登录", "支付", "银行", "身份证", "付款", "转账", "银行卡"]
-    private static let codePatterns = [
-        #"(?:取件码|取货码|提货码|提取码|自提码|取件密码|取件凭证|取货凭证|领取码|柜门密码|开箱码|开柜码|凭码|验证码)[：:\s]*([A-Za-z0-9-]{4,12})"#,
-        #"(?<![A-Za-z0-9])(?:\d{1,4}-\d{2,6}|[A-Za-z0-9]{4,10})(?![A-Za-z0-9])"#
-    ]
+    // 连字符属于码的一部分，两侧边界禁止从完整码内部再次匹配。
+    private static let codePattern = #"(?<![A-Za-z0-9-])[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*(?![A-Za-z0-9-])"#
 
     /// 先确认短信具有取件语义，再从候选数字中排除订单号、日期和无关验证码。
     static func parse(_ message: String) -> PickupParseResult? {
@@ -52,14 +50,9 @@ enum PickupParser {
     }
 
     private static func extractCodes(from text: String) -> [String] {
-        var candidates: [(value: String, range: Range<String.Index>)] = []
-        for pattern in codePatterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                let capture = match.numberOfRanges > 1 ? 1 : 0
-                guard let valueRange = Range(match.range(at: capture), in: text) else { continue }
-                candidates.append((String(text[valueRange]).uppercased(), valueRange))
-            }
+        let candidates = regexMatches(codePattern, in: text).compactMap { match -> (value: String, range: Range<String.Index>)? in
+            guard let range = Range(match.range, in: text) else { return nil }
+            return (String(text[range]).uppercased(), range)
         }
 
         var accepted: [String] = []
@@ -72,22 +65,24 @@ enum PickupParser {
             let termRange = pickupTerms
                 .compactMap { prefix.range(of: $0, options: .backwards) }
                 .max { $0.upperBound < $1.upperBound }
-            let hasNearbyPickupTerm: Bool
-            if let termRange {
-                hasNearbyPickupTerm = prefix.distance(from: termRange.upperBound, to: prefix.endIndex) <= 28
-            } else {
-                hasNearbyPickupTerm = acceptedRanges.last.map { previousRange in
-                    let separator = text[previousRange.upperBound..<candidate.range.lowerBound]
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    return separator.count <= 8 && separator.allSatisfy { "、,，和或及/".contains($0) }
-                } ?? false
-            }
-            guard hasNearbyPickupTerm else { continue }
+            // 码必须紧跟取件关键词或上一个码的列表分隔符，避免吸入楼号、地址和订单号。
+            let followsKeyword = termRange.map { range in
+                let bridge = String(prefix[range.upperBound...])
+                return bridge.count <= 12 && bridge.allSatisfy { " ：:为是【】[]()（）".contains($0) }
+            } ?? false
+            let followsCode = acceptedRanges.last.map { previousRange in
+                let separator = text[previousRange.upperBound..<candidate.range.lowerBound]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return !separator.isEmpty && separator.count <= 8
+                    && separator.allSatisfy { "、,，和或及/ ".contains($0) }
+            } ?? false
+            guard followsKeyword || followsCode else { continue }
 
             let localContext = String(prefix.suffix(22))
             guard !negativeTerms.contains(where: { localContext.localizedCaseInsensitiveContains($0) }) else { continue }
-            let value = candidate.value.replacingOccurrences(of: " ", with: "")
-            guard (4...12).contains(value.count),
+            let value = candidate.value
+            let validLength = value.contains("-") ? (3...32).contains(value.count) : (4...12).contains(value.count)
+            guard validLength,
                   !(value.allSatisfy(\.isNumber) && value.count > 8),
                   !accepted.contains(value) else { continue }
             accepted.append(value)
@@ -98,12 +93,12 @@ enum PickupParser {
 
     private static func extractAddress(from text: String, station: String?) -> String {
         let addressPatterns = [
-            #"(?:取件地址|地址|地点|位置)[：:\s]*([^，,。\n；;]{2,60})"#,
-            #"(?:存放于|放置在|送至|到达|存入|位于)\s*(.{2,40}?)(?:取件码|取货码|提货码|取件号|领取码|请凭|[，,。\n；;]|$)"#
+            #"(?:取件地址|地址|地点|位置)[：:\s]*(.{2,60}?)(?=领取|取件码|取货码|提货码|请凭|[，,。\n；;]|$)"#,
+            #"(?:存放于|放置在|送至|到达|存入|位于|前往|请到|至)\s*(.{2,60}?)(?=领取|取件码|取货码|提货码|取件号|领取码|请凭|取件|取货|[，,。\n；;]|$)"#
         ]
         for pattern in addressPatterns {
             guard let match = regexMatches(pattern, in: text).first,
-           match.numberOfRanges > 1,
+                  match.numberOfRanges > 1,
                   let range = Range(match.range(at: 1), in: text) else { continue }
             let candidate = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
             if candidate.count >= 2 { return candidate }
@@ -113,7 +108,14 @@ enum PickupParser {
         let trimmed = suffix.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "：:，,。")))
         let end = trimmed.firstIndex(where: { "，,。\n；;请".contains($0) }) ?? trimmed.endIndex
         let candidate = String(trimmed[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if candidate.count >= 2, candidate.count <= 40 { return candidate }
+        // 没有明确地址引导词时，只接受带位置特征的后缀，不把领取提示当地址。
+        let actionTerms = ["领取", "取件", "取货", "包裹", "快递", "取货码", "取件码"]
+        let locationTerms = ["路", "街", "巷", "号", "楼", "栋", "层", "室", "小区", "花园", "门", "柜"]
+        if (2...40).contains(candidate.count),
+           !actionTerms.contains(where: candidate.contains),
+           locationTerms.contains(where: candidate.contains) {
+            return candidate
+        }
         return ""
     }
 

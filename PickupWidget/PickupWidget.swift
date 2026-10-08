@@ -87,174 +87,131 @@ struct PickupLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PickupActivityAttributes.self) { context in
             LockScreenPickupView(state: context.state)
-                // 使用深色高对比背景，避免浅色锁屏卡片上出现白色文字不可读的问题。
                 .activityBackgroundTint(Color(red: 0.08, green: 0.10, blue: 0.14))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        PickupIslandTile(size: 34)
-                        Text("待取包裹")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
+                    Label("待取 \(context.state.waitingCount) 件", systemImage: "shippingbox.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.cyan)
+                        .padding(.leading, 8)
+                        .padding(.top, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("\(context.state.waitingCount)")
-                            .font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit())
-                        Text("件待取")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    let hidden = PickupActivityDetails.hiddenCount(for: context.state)
+                    Text(hidden > 0 ? "另有 \(hidden) 件 ›" : "打开取件 ›")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.65))
+                        .padding(.trailing, 8)
+                        .padding(.top, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Divider()
-                        .padding(.bottom, 2)
-                    DynamicIslandPickupList(state: context.state)
+                    PickupActivityDetails(state: context.state)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
                 }
             } compactLeading: {
                 Image(systemName: "shippingbox.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.cyan)
                     .accessibilityLabel("有待取包裹")
             } compactTrailing: {
                 Text("\(context.state.waitingCount)")
                     .font(.caption.weight(.bold).monospacedDigit())
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.cyan)
                     .accessibilityLabel("未取 \(context.state.waitingCount) 件")
             } minimal: {
-                ZStack {
-                    Circle()
-                        .fill(.blue.opacity(0.16))
-                    Image(systemName: "shippingbox.fill")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.blue)
-                }
-            }
-            .keylineTint(.blue)
-        }
-    }
-}
-
-private struct PickupIslandTile: View {
-    let size: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-            .fill(Color.blue.opacity(0.14))
-            .overlay {
                 Image(systemName: "shippingbox.fill")
-                    .font(.system(size: size * 0.52, weight: .semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.cyan)
             }
-            .frame(width: size, height: size)
-    }
-}
-
-private struct DynamicIslandPickupList: View {
-    let state: PickupActivityAttributes.ContentState
-
-    private var visibleStations: [PickupActivityAttributes.StationSummary] {
-        Array(state.stations.prefix(5))
-    }
-
-    private var visibleCodeCount: Int {
-        visibleStations.reduce(0) { $0 + $1.codes.count }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(visibleStations, id: \.nameAndAddress) { station in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(station.name)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Text(station.codes.joined(separator: "  ·  "))
-                        .font(.system(.body, design: .rounded).weight(.semibold).monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                }
-            }
-            let hiddenCount = max(0, state.waitingCount - visibleCodeCount)
-            if hiddenCount > 0 {
-                HStack {
-                    Text("更多包裹")
-                    Spacer()
-                    Text("另有 \(hiddenCount) 件")
-                        .monospacedDigit()
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
+            .keylineTint(.cyan)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct LockScreenPickupView: View {
     let state: PickupActivityAttributes.ContentState
-    private let primaryText = Color.white
-    private let secondaryText = Color.white.opacity(0.68)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
                 Label("待取 \(state.waitingCount) 件", systemImage: "shippingbox.fill")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.cyan)
-                Spacer()
-                Text(state.updatedAt, style: .relative)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(secondaryText)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.cyan)
+                Spacer(minLength: 8)
+                let hidden = PickupActivityDetails.hiddenCount(for: state)
+                Text(hidden > 0 ? "另有 \(hidden) 件 ›" : "打开取件 ›")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(1)
             }
-            StationCodesView(
-                stations: state.stations,
-                limit: 4,
-                primaryText: primaryText,
-                secondaryText: secondaryText
-            )
+            PickupActivityDetails(state: state)
         }
-        .padding(.vertical, 8)
+        // 实时动态不会替内容补齐安全留白，需要显式避开卡片的圆角区域。
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private struct StationCodesView: View {
-    let stations: [PickupActivityAttributes.StationSummary]
-    let limit: Int
-    let primaryText: Color
-    let secondaryText: Color
+/// 锁屏与展开灵动岛共用信息层级：驿站、快递公司、完整取件码。
+private struct PickupActivityDetails: View {
+    let state: PickupActivityAttributes.ContentState
+
+    private static func codes(for station: PickupActivityAttributes.StationSummary, stationCount: Int) -> [String] {
+        let hasLongCode = station.codes.prefix(stationCount > 1 ? 2 : 4).contains { $0.count > 12 }
+        // 长码独占一行；普通码两列展示，剩余数量只按实际可见的码计算。
+        let limit = hasLongCode ? (stationCount > 1 ? 1 : 2) : (stationCount > 1 ? 2 : 4)
+        return Array(station.codes.prefix(limit))
+    }
+
+    static func hiddenCount(for state: PickupActivityAttributes.ContentState) -> Int {
+        let visible = state.stations.prefix(2).reduce(0) {
+            $0 + codes(for: $1, stationCount: state.stations.count).count
+        }
+        return max(0, state.waitingCount - visible)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            ForEach(Array(stations.prefix(limit)), id: \.nameAndAddress) { station in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(Color.cyan)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(state.stations.prefix(2)), id: \.nameAndAddress) { station in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
                         Text(station.name)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(primaryText)
-                        if !station.address.isEmpty {
-                            Text(station.address)
-                                .font(.caption2)
-                                .foregroundStyle(secondaryText)
-                                .lineLimit(1)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text((station.courierNames ?? []).joined(separator: " · "))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.65))
+                            .lineLimit(1)
+                    }
+                    let visibleCodes = Self.codes(for: station, stationCount: state.stations.count)
+                    let columns = visibleCodes.contains { $0.count > 12 } || visibleCodes.count == 1 ? 1 : 2
+                    let rows = stride(from: 0, to: visibleCodes.count, by: columns).map {
+                        Array(visibleCodes[$0..<min($0 + columns, visibleCodes.count)])
+                    }
+                    VStack(spacing: 4) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: 6) {
+                                ForEach(Array(row.enumerated()), id: \.offset) { _, code in
+                                    Text(code)
+                                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.6)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+                                        .accessibilityLabel("取件码 \(code)")
+                                }
+                            }
                         }
                     }
-                    Text(station.codes.joined(separator: " · "))
-                        .font(.system(.body, design: .rounded).weight(.bold).monospacedDigit())
-                        .foregroundStyle(primaryText)
-                        .lineLimit(1)
                 }
-            }
-            if stations.count > limit {
-                Text("还有更多包裹待取")
-                    .font(.caption2)
-                    .foregroundStyle(secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

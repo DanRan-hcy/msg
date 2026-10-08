@@ -54,6 +54,35 @@ enum PickupStore {
         return parsed.codes.count
     }
 
+    /// 仅修正可从短信原文确认的旧解析错误；手填记录和已取历史保持原样。
+    static func repairParsedWaitingItems(in context: ModelContext) throws {
+        let descriptor = FetchDescriptor<PickupItem>(
+            predicate: #Predicate { $0.source == "shortcut" && $0.statusRawValue == "waiting" }
+        )
+        let groups = Dictionary(grouping: try context.fetch(descriptor), by: \.fingerprint)
+        for items in groups.values {
+            guard let original = items.first,
+                  items.allSatisfy({ $0.rawMessage == original.rawMessage }),
+                  let parsed = PickupParser.parse(original.rawMessage) else { continue }
+            let completeCodes = Set(items.map(\.code)).intersection(parsed.codes)
+            for item in items {
+                if completeCodes.contains(item.code) {
+                    if !parsed.stationAddress.isEmpty, item.stationAddress != parsed.stationAddress {
+                        item.stationAddress = parsed.stationAddress
+                    }
+                } else if !parsed.codes.contains(item.code), completeCodes.contains(where: {
+                    // 只有同条短信已有完整码时才删除其后缀副本，避免误删独立取件码。
+                    $0.hasSuffix("-" + item.code)
+                }) {
+                    context.delete(item)
+                }
+            }
+        }
+        guard context.hasChanges else { return }
+        try context.save()
+        PickupWidgetSnapshotWriter.refresh(context: context)
+    }
+
     static func markCompleted(_ item: PickupItem, in context: ModelContext) throws {
         item.status = .completed
         item.completedAt = .now

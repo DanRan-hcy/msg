@@ -76,12 +76,7 @@ struct PickupHomeView: View {
                                             Text("\(group.items.count) 个包裹")
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
-                                            if !group.address.isEmpty {
-                                                Text(group.address)
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            }
+
                                         }
                                         Spacer()
                                         Image(systemName: "chevron.right")
@@ -100,17 +95,7 @@ struct PickupHomeView: View {
                                         .padding(.horizontal, 14)
                                 }
 
-                                if !group.address.isEmpty {
-                                    Text(group.address)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal, 16)
-                                        .padding(.top, 6)
-                                        .padding(.bottom, 14)
-                                } else {
-                                    Color.clear.frame(height: 10)
-                                }
+                                Color.clear.frame(height: 12)
                             }
                             .background(
                                 Color(uiColor: .secondarySystemBackground),
@@ -133,7 +118,7 @@ struct PickupHomeView: View {
                     Button {
                         showingCompleteAllConfirmation = true
                     } label: {
-                        Image(systemName: "checkmark")
+                        Image(systemName: "checklist")
                             .font(.title3.weight(.bold))
                             .foregroundStyle(.primary)
                             .frame(width: 54, height: 54)
@@ -178,15 +163,13 @@ struct PickupHomeView: View {
                     .accessibilityLabel("手动添加")
                 }
             }
-            .confirmationDialog(
-                "全部标记为已取？",
+            .pickupPrompt(
                 isPresented: $showingCompleteAllConfirmation,
-                titleVisibility: .visible
+                title: "全部标记为已取？",
+                message: "共 \(items.count) 个待取包裹会移入历史记录。",
+                confirmTitle: "全部标记为已取"
             ) {
-                Button("全部标记为已取", action: { onCompleteAll(items) })
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("共 \(items.count) 个待取包裹会移入历史记录。")
+                onCompleteAll(items)
             }
         }
     }
@@ -231,6 +214,7 @@ private struct HomeSummaryView: View {
 }
 
 struct PickupStationDetailView: View {
+    @State private var showingCompleteAllConfirmation = false
     @Query private var items: [PickupItem]
     let stationName: String
     let stationAddress: String
@@ -268,11 +252,7 @@ struct PickupStationDetailView: View {
                     Text("\(items.count) 个包裹")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    if !stationAddress.isEmpty {
-                        Label(stationAddress, systemImage: "mappin.and.ellipse")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -293,9 +273,9 @@ struct PickupStationDetailView: View {
         .safeAreaInset(edge: .bottom) {
             if !items.isEmpty {
                 Button {
-                    onCompleteAll(items)
+                    showingCompleteAllConfirmation = true
                 } label: {
-                    Label("全部标记为已取", systemImage: "checkmark.circle.fill")
+                    Label("全部标记为已取", systemImage: "checklist")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -306,6 +286,14 @@ struct PickupStationDetailView: View {
                 .padding(.bottom, 8)
                 .background(.bar)
             }
+        }
+        .pickupPrompt(
+            isPresented: $showingCompleteAllConfirmation,
+            title: "这个驿站的包裹全部已取？",
+            message: "共 \(items.count) 个待取包裹会移入历史记录。",
+            confirmTitle: "全部标记为已取"
+        ) {
+            onCompleteAll(items)
         }
     }
 }
@@ -458,44 +446,52 @@ struct PickupSettingsView: View {
                 }
             }
             .navigationTitle("设置")
-            .confirmationDialog("清除全部历史记录？", isPresented: $showingClearConfirmation, titleVisibility: .visible) {
-                Button("清除历史记录", role: .destructive, action: clearHistory)
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("此操作无法撤销。待取包裹不会受影响。")
-            }
-            .confirmationDialog("清除示例数据？", isPresented: $showingSampleClearConfirmation, titleVisibility: .visible) {
-                Button("清除示例数据", role: .destructive, action: clearSamples)
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("只会删除标记为“示例”的记录，不影响你的取件信息。")
-            }
-            .alert("通知权限未开启", isPresented: $showingNotificationDenied) {
-                Button("知道了", role: .cancel) {}
-                if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                    Link("打开系统设置", destination: settingsURL)
-                }
-            } message: {
-                Text("请在系统设置中允许“取件”发送通知，然后再开启此选项。")
-            }
-            .alert("实时动态未开启", isPresented: $showingActivityError) {
-                Button("知道了", role: .cancel) {}
-                if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                    Link("打开系统设置", destination: settingsURL)
-                }
-            } message: {
-                Text("请在系统设置中允许“取件”的实时动态，然后重新打开此开关。")
-            }
-            .alert("清理失败", isPresented: $showingClearError) {
-                Button("好", role: .cancel) {}
-            } message: {
-                Text("历史记录没有清除，请稍后重试。")
-            }
-            .alert("示例数据操作失败", isPresented: $showingSampleError) {
-                Button("好", role: .cancel) {}
-            } message: {
-                Text("示例数据没有更新，请稍后重试。")
-            }
+            .pickupPrompt(
+                isPresented: $showingClearConfirmation,
+                title: "清除全部历史记录？",
+                message: "此操作无法撤销。待取包裹不会受影响。",
+                confirmTitle: "清除历史记录",
+                isDestructive: true,
+                action: clearHistory
+            )
+            .pickupPrompt(
+                isPresented: $showingSampleClearConfirmation,
+                title: "清除示例数据？",
+                message: "只会删除标记为“示例”的记录，不影响你的取件信息。",
+                confirmTitle: "清除示例数据",
+                isDestructive: true,
+                action: clearSamples
+            )
+            .pickupPrompt(
+                isPresented: $showingNotificationDenied,
+                title: "通知权限未开启",
+                message: "请在系统设置中允许“取件”发送通知，然后再开启此选项。",
+                confirmTitle: "打开系统设置",
+                cancelTitle: "暂不开启",
+                action: openSystemSettings
+            )
+            .pickupPrompt(
+                isPresented: $showingActivityError,
+                title: "实时动态未开启",
+                message: activityStatus,
+                confirmTitle: "打开系统设置",
+                cancelTitle: "稍后再说",
+                action: openSystemSettings
+            )
+            .pickupPrompt(
+                isPresented: $showingClearError,
+                title: "清理失败",
+                message: "历史记录没有清除，请稍后重试。",
+                confirmTitle: "知道了",
+                cancelTitle: nil
+            ) {}
+            .pickupPrompt(
+                isPresented: $showingSampleError,
+                title: "示例数据操作失败",
+                message: "示例数据没有更新，请稍后重试。",
+                confirmTitle: "知道了",
+                cancelTitle: nil
+            ) {}
             .task {
                 refreshActivityStatus()
             }
@@ -505,6 +501,11 @@ struct PickupSettingsView: View {
                 refreshActivity()
             }
         }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func refreshActivity() {
@@ -634,6 +635,7 @@ struct PickupShortcutGuideView: View {
 }
 
 private struct PickupDetailCard: View {
+    @State private var showingDeleteConfirmation = false
     let item: PickupItem
     let onComplete: () -> Void
     let onDelete: () -> Void
@@ -662,27 +664,41 @@ private struct PickupDetailCard: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            Button("复制取件码", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = item.code
+            HStack(spacing: 12) {
+                Button {
+                    UIPasteboard.general.string = item.code
+                } label: {
+                    Label("复制取件码", systemImage: "doc.on.doc")
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.bordered)
+
+                PickupCompleteButton(code: item.code, action: onComplete)
             }
-            .font(.subheadline)
-            .buttonStyle(.bordered)
-            .contextMenu {
-                Button("标记为已取", systemImage: "checkmark", action: onComplete)
-                Button("删除记录", systemImage: "trash", role: .destructive, action: onDelete)
-            }
+            .font(.subheadline.weight(.medium))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .contextMenu {
-            Button("标记为已取", systemImage: "checkmark", action: onComplete)
-            Button("删除记录", systemImage: "trash", role: .destructive, action: onDelete)
+            Button("标记为已取", systemImage: "checkmark.circle.fill", action: onComplete)
+            Button("删除记录", systemImage: "trash", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
         }
+        .pickupPrompt(
+            isPresented: $showingDeleteConfirmation,
+            title: "删除这条取件记录？",
+            message: "取件码 \(item.code) 将被删除，此操作无法撤销。",
+            confirmTitle: "删除记录",
+            isDestructive: true,
+            action: onDelete
+        )
     }
 }
 
 private struct PickupHistoryRow: View {
+    @State private var showingDeleteConfirmation = false
     let item: PickupItem
     let onDelete: () -> Void
 
@@ -701,7 +717,7 @@ private struct PickupHistoryRow: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                 Text("已取")
-                if !item.stationAddress.isEmpty { Text("· \(item.stationAddress)") }
+                if !item.courierName.isEmpty { Text("· \(item.courierName)") }
                 if item.source == "demo" { Text("· 示例") }
             }
             .font(.caption)
@@ -714,8 +730,37 @@ private struct PickupHistoryRow: View {
             Button("复制取件码", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = item.code
             }
-            Button("删除记录", systemImage: "trash", role: .destructive, action: onDelete)
+            Button("删除记录", systemImage: "trash", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
         }
+        .pickupPrompt(
+            isPresented: $showingDeleteConfirmation,
+            title: "删除这条历史记录？",
+            message: "取件码 \(item.code) 的历史记录将被删除，此操作无法撤销。",
+            confirmTitle: "删除记录",
+            isDestructive: true,
+            action: onDelete
+        )
+    }
+}
+
+private struct PickupCompleteButton: View {
+    let code: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "checkmark.seal")
+                .font(.system(size: 21, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(Color(uiColor: .systemBackground).opacity(0.72), in: Circle())
+                .overlay { Circle().stroke(Color.primary.opacity(0.12), lineWidth: 0.8) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("标记为已取")
+        .accessibilityValue(code)
     }
 }
 
@@ -731,35 +776,38 @@ private struct PickupCodeRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.code)
                     .font(.system(size: 25, weight: .semibold, design: .rounded).monospacedDigit())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
                     .textSelection(.enabled)
                 HStack(spacing: 7) {
                     if !item.courierName.isEmpty { Text(item.courierName) }
                     Text(item.receivedAt.formatted(date: .omitted, time: .shortened))
                     if item.source == "demo" { Text("示例") }
+                    if copied { Text("已复制").foregroundStyle(.green) }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
             Spacer(minLength: 4)
-            Text("复制")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Button(action: copyCode) {
-                if copied {
-                    Label("已复制", systemImage: "checkmark")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.tint)
-                } else {
-                        Image(systemName: "doc.on.doc")
+            HStack(spacing: 8) {
+                Button(action: copyCode) {
+                    Image(systemName: copied ? "doc.on.doc.fill" : "doc.on.doc")
                         .font(.body.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 42, height: 42)
+                        .foregroundStyle(copied ? Color.green : Color.primary)
+                        .frame(width: 44, height: 44)
                         .background(Color(uiColor: .systemBackground).opacity(0.72), in: Circle())
                         .overlay { Circle().stroke(Color.primary.opacity(0.12), lineWidth: 0.8) }
                 }
+                .accessibilityLabel(copied ? "已复制" : "复制取件码")
+                .accessibilityValue(item.code)
+
+                if let onComplete {
+                    PickupCompleteButton(code: item.code, action: onComplete)
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(copied ? "已复制" : "复制取件码")
+            .fixedSize()
         }
         .padding(.vertical, 6)
         .contextMenu {
@@ -773,9 +821,14 @@ private struct PickupCodeRow: View {
                 }
             }
         }
-        .confirmationDialog("删除这条取件记录？", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
-            Button("删除记录", role: .destructive) { onDelete?() }
-            Button("取消", role: .cancel) {}
+        .pickupPrompt(
+            isPresented: $showingDeleteConfirmation,
+            title: "删除这条取件记录？",
+            message: "取件码 \(item.code) 将被删除，此操作无法撤销。",
+            confirmTitle: "删除记录",
+            isDestructive: true
+        ) {
+            onDelete?()
         }
     }
 
@@ -799,4 +852,95 @@ private func dayTitle(_ date: Date) -> String {
     if calendar.isDateInToday(date) { return "今天" }
     if calendar.isDateInYesterday(date) { return "昨天" }
     return date.formatted(.dateTime.year().month().day())
+}
+
+extension View {
+    /// 所有应用内提示使用底部面板，避免系统确认菜单根据锚点显示到页面顶部。
+    func pickupPrompt(
+        isPresented: Binding<Bool>,
+        title: String,
+        message: String,
+        confirmTitle: String,
+        isDestructive: Bool = false,
+        cancelTitle: String? = "取消",
+        action: @escaping () -> Void
+    ) -> some View {
+        modifier(PickupPromptModifier(
+            isPresented: isPresented,
+            title: title,
+            message: message,
+            confirmTitle: confirmTitle,
+            isDestructive: isDestructive,
+            cancelTitle: cancelTitle,
+            action: action
+        ))
+    }
+}
+
+private struct PickupPromptModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var didConfirm = false
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let isDestructive: Bool
+    let cancelTitle: String?
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: $isPresented, onDismiss: {
+            // 等面板关闭再删除记录或弹出错误提示，避免承载面板的行先被移除。
+            guard didConfirm else { return }
+            didConfirm = false
+            action()
+        }) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(spacing: 12) {
+                        Button(role: isDestructive ? .destructive : nil) {
+                            didConfirm = true
+                            isPresented = false
+                        } label: {
+                            Text(confirmTitle)
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .foregroundStyle(.white)
+                                .background(isDestructive ? Color.red : Color.accentColor, in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                        if let cancelTitle {
+                            Button(role: .cancel) {
+                                isPresented = false
+                            } label: {
+                                Text(cancelTitle)
+                                    .font(.body.weight(.medium))
+                                    .frame(maxWidth: .infinity, minHeight: 48)
+                                    .foregroundStyle(.primary)
+                                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 12)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 30)
+                .padding(.bottom, 20)
+            }
+            .onAppear { didConfirm = false }
+            .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(320), .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(28)
+            .presentationCompactAdaptation(.sheet)
+        }
+    }
 }
