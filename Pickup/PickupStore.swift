@@ -180,6 +180,10 @@ enum PickupStore {
 enum PickupNotificationManager {
     private static let enabledKey = "pickup.notifications.enabled"
 
+    static func cancelPendingNotifications() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+
     static func requestPermission() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
@@ -199,7 +203,9 @@ enum PickupNotificationManager {
         guard UserDefaults.standard.bool(forKey: enabledKey) else { return }
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
-        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+        guard settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+                || settings.authorizationStatus == .ephemeral else { return }
 
         let content = UNMutableNotificationContent()
         content.title = "新增取件码"

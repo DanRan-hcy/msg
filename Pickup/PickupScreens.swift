@@ -357,6 +357,7 @@ struct PickupHistoryView: View {
 
 struct PickupSettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("pickup.notifications.enabled") private var notificationsEnabled = false
     @AppStorage("pickup.liveActivity.enabled") private var liveActivitiesEnabled = true
     @State private var showingClearConfirmation = false
@@ -365,6 +366,8 @@ struct PickupSettingsView: View {
     @State private var showingClearError = false
     @State private var showingSampleError = false
     @State private var activityPermissionEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+    @State private var activityStatus = "检查中…"
+    @State private var showingActivityError = false
     let waitingCount: Int
     let completedCount: Int
     let sampleCount: Int
@@ -392,9 +395,15 @@ struct PickupSettingsView: View {
                 Section("实时动态") {
                     Toggle("在灵动岛和锁定画面显示", isOn: $liveActivitiesEnabled)
                         .onChange(of: liveActivitiesEnabled) { _, _ in
-                            Task { await PickupActivityManager.refresh(context: modelContext) }
+                            refreshActivity()
                         }
-                    LabeledContent("系统状态", value: activityPermissionEnabled ? "可用" : "系统设置未允许")
+                    LabeledContent("系统状态", value: activityStatus)
+                    if !activityPermissionEnabled {
+                        Button("打开系统设置") {
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                            UIApplication.shared.open(url)
+                        }
+                    }
                     Text("将所有待取包裹汇总显示。系统可能会限制实时动态的展示时长。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -469,6 +478,14 @@ struct PickupSettingsView: View {
             } message: {
                 Text("请在系统设置中允许“取件”发送通知，然后再开启此选项。")
             }
+            .alert("实时动态未开启", isPresented: $showingActivityError) {
+                Button("知道了", role: .cancel) {}
+                if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                    Link("打开系统设置", destination: settingsURL)
+                }
+            } message: {
+                Text("请在系统设置中允许“取件”的实时动态，然后重新打开此开关。")
+            }
             .alert("清理失败", isPresented: $showingClearError) {
                 Button("好", role: .cancel) {}
             } message: {
@@ -480,14 +497,43 @@ struct PickupSettingsView: View {
                 Text("示例数据没有更新，请稍后重试。")
             }
             .task {
-                activityPermissionEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+                refreshActivityStatus()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                refreshActivityStatus()
+                refreshActivity()
             }
         }
+    }
+
+    private func refreshActivity() {
+        Task {
+            let result = await PickupActivityManager.refresh(context: modelContext)
+            activityPermissionEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+            activityStatus = result.message
+            if case .systemDisabled = result {
+                showingActivityError = liveActivitiesEnabled
+            }
+            if case .failed = result {
+                showingActivityError = liveActivitiesEnabled
+            }
+        }
+    }
+
+    private func refreshActivityStatus() {
+        activityPermissionEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+        if !activityPermissionEnabled {
+            activityStatus = "系统设置未允许"
+            return
+        }
+        activityStatus = liveActivitiesEnabled ? "可用" : "已关闭"
     }
 
     private func updateNotificationPreference(_ enabled: Bool) {
         guard enabled else {
             notificationsEnabled = false
+            PickupNotificationManager.cancelPendingNotifications()
             return
         }
         Task {

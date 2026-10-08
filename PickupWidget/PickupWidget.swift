@@ -87,8 +87,9 @@ struct PickupLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PickupActivityAttributes.self) { context in
             LockScreenPickupView(state: context.state)
-                .activityBackgroundTint(Color(uiColor: .systemBackground))
-                .activitySystemActionForegroundColor(.primary)
+                // 使用深色高对比背景，避免浅色锁屏卡片上出现白色文字不可读的问题。
+                .activityBackgroundTint(Color(red: 0.08, green: 0.10, blue: 0.14))
+                .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -195,27 +196,36 @@ private struct DynamicIslandPickupList: View {
 
 private struct LockScreenPickupView: View {
     let state: PickupActivityAttributes.ContentState
+    private let primaryText = Color.white
+    private let secondaryText = Color.white.opacity(0.68)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("待取 \(state.waitingCount) 件", systemImage: "shippingbox.fill")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.cyan)
                 Spacer()
-                Text("刚刚更新")
+                Text(state.updatedAt, style: .relative)
                     .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryText)
             }
-            StationCodesView(stations: state.stations, limit: 4)
+            StationCodesView(
+                stations: state.stations,
+                limit: 4,
+                primaryText: primaryText,
+                secondaryText: secondaryText
+            )
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
     }
 }
 
 private struct StationCodesView: View {
     let stations: [PickupActivityAttributes.StationSummary]
     let limit: Int
+    let primaryText: Color
+    let secondaryText: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -224,19 +234,27 @@ private struct StationCodesView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "mappin.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.blue)
-                        Text(station.name).font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.cyan)
+                        Text(station.name)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(primaryText)
                         if !station.address.isEmpty {
-                            Text(station.address).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            Text(station.address)
+                                .font(.caption2)
+                                .foregroundStyle(secondaryText)
+                                .lineLimit(1)
                         }
                     }
                     Text(station.codes.joined(separator: " · "))
                         .font(.system(.body, design: .rounded).weight(.bold).monospacedDigit())
+                        .foregroundStyle(primaryText)
                         .lineLimit(1)
                 }
             }
             if stations.count > limit {
-                Text("还有更多包裹待取").font(.caption2).foregroundStyle(.secondary)
+                Text("还有更多包裹待取")
+                    .font(.caption2)
+                    .foregroundStyle(secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
